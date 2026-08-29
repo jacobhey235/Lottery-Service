@@ -41,6 +41,15 @@ class ConnectionManager:
         for uid in dead_user_ids:
             self.disconnect_user(uid)
 
+    async def broadcast_to_admins(self, message: dict[str, Any]) -> None:
+        dead: set[WebSocket] = set()
+        for ws in list(self.admins):
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead.add(ws)
+        self.admins -= dead
+
     async def send_to_user(self, user_id: str, message: dict[str, Any]) -> None:
         ws = self.users.get(user_id)
         if ws:

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import ContestState, Photo, User
 from app.schemas import StatusResponse, UploadResponse
+from app.ws_manager import manager
 
 router = APIRouter()
 
@@ -62,5 +63,12 @@ async def upload_photo(photo: UploadFile, db: AsyncSession = Depends(get_db)):
     )
     db.add(photo_row)
     await db.commit()
+
+    await manager.broadcast_to_admins({
+        "event": "photo_uploaded",
+        "photo_id": str(photo_row.id),
+        "like_count": 0,
+        "skip_count": 0,
+    })
 
     return UploadResponse(user_id=user.id, photo_id=photo_row.id)

@@ -28,6 +28,9 @@
         <span class="phase-badge" :class="phase">
           {{ phaseLabel }}
         </span>
+        <button class="btn btn-ghost btn-fullscreen" @click="showFullscreen = true" title="Полноэкранный режим">
+          ⛶ На весь экран
+        </button>
       </div>
 
       <!-- Controls -->
@@ -114,11 +117,45 @@
         </div>
       </div>
     </div>
+
+    <!-- Fullscreen overlay -->
+    <Teleport to="body">
+      <div v-if="showFullscreen" class="fs-overlay" @keydown.esc="showFullscreen = false" tabindex="0" ref="fsOverlay">
+        <button class="fs-close" @click="showFullscreen = false">✕ Закрыть</button>
+
+        <div class="fs-header">
+          <span class="fs-phase-badge" :class="phase">{{ phaseLabel }}</span>
+          <h1 class="fs-title">
+            {{ phase === 'finished' ? '🏆 Результаты конкурса' : phase === 'voting' ? '🗳️ Идёт голосование' : '📷 Загруженные фотографии' }}
+          </h1>
+        </div>
+
+        <div v-if="sortedPhotos.length === 0" class="fs-empty">
+          Нет фотографий
+        </div>
+
+        <div v-else class="fs-grid" :class="{ 'fs-grid-few': sortedPhotos.length <= 3 }">
+          <div
+            v-for="(p, idx) in sortedPhotos"
+            :key="p.photo_id"
+            class="fs-card"
+            :class="{ 'fs-card-gold': idx === 0, 'fs-card-silver': idx === 1, 'fs-card-bronze': idx === 2 }"
+          >
+            <div class="fs-rank">{{ p._rank }}</div>
+            <img :src="adminPhotoSrc(p.photo_id)" class="fs-photo" alt="" />
+            <div class="fs-stats">
+              <span class="fs-likes">❤️ {{ p.like_count }}</span>
+              <span class="fs-skips">👎 {{ p.skip_count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   adminDeletePhoto, adminEndContest, adminListPhotos,
   adminLogin, adminRestartContest, adminStartContest,
@@ -137,6 +174,15 @@ const photos = ref([])
 const photosLoading = ref(false)
 const actionLoading = ref(false)
 const actionError = ref('')
+
+const showFullscreen = ref(false)
+const fsOverlay = ref(null)
+
+watch(showFullscreen, (val) => {
+  if (val) {
+    nextTick(() => fsOverlay.value?.focus())
+  }
+})
 
 const phaseLabel = computed(() => ({
   upload: 'Приём фотографий',
@@ -164,8 +210,25 @@ function handleWsMessage(msg) {
   if (msg.event === 'contest_started') { phase.value = 'voting'; loadPhotos() }
   if (msg.event === 'contest_finished') { phase.value = 'finished'; loadPhotos() }
   if (msg.event === 'contest_restarted') { phase.value = 'upload'; photos.value = [] }
+
+  if (msg.event === 'photo_uploaded') {
+    photos.value.push({
+      photo_id: msg.photo_id,
+      like_count: msg.like_count,
+      skip_count: msg.skip_count,
+    })
+  }
+
   if (msg.event === 'photo_deleted') {
     photos.value = photos.value.filter(p => p.photo_id !== msg.photo_id)
+  }
+
+  if (msg.event === 'vote_updated') {
+    const photo = photos.value.find(p => p.photo_id === msg.photo_id)
+    if (photo) {
+      photo.like_count = msg.like_count
+      photo.skip_count = msg.skip_count
+    }
   }
 }
 
@@ -275,6 +338,7 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 12px 0 16px;
+  flex-wrap: wrap;
 }
 .admin-title { font-size: 1.3rem; font-weight: 700; flex: 1; }
 .phase-badge {
@@ -287,6 +351,14 @@ onMounted(async () => {
 }
 .phase-badge.voting { background: rgba(82, 183, 136, 0.15); border-color: var(--color-success); color: var(--color-success); }
 .phase-badge.finished { background: rgba(124, 110, 240, 0.15); border-color: var(--color-primary); color: var(--color-primary); }
+
+.btn-fullscreen {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .controls-row {
   display: flex;
   gap: 12px;
@@ -352,4 +424,114 @@ onMounted(async () => {
 @media (min-width: 600px) {
   .photos-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 }
+
+/* ── Fullscreen overlay ── */
+.fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #08080f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 24px 32px;
+  overflow-y: auto;
+  outline: none;
+}
+
+.fs-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--color-text-muted);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  z-index: 10000;
+}
+.fs-close:hover { background: rgba(255,255,255,0.15); color: var(--color-text); }
+
+.fs-header {
+  text-align: center;
+  margin-bottom: 36px;
+  margin-top: 8px;
+}
+.fs-title {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-top: 10px;
+}
+.fs-phase-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 100px;
+  background: var(--color-surface2);
+  border: 1px solid var(--color-border);
+}
+.fs-phase-badge.voting { background: rgba(82, 183, 136, 0.2); border-color: var(--color-success); color: var(--color-success); }
+.fs-phase-badge.finished { background: rgba(124, 110, 240, 0.2); border-color: var(--color-primary); color: var(--color-primary); }
+
+.fs-empty {
+  color: var(--color-text-muted);
+  font-size: 1.2rem;
+  margin-top: 80px;
+}
+
+.fs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1200px;
+}
+.fs-grid.fs-grid-few {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 340px));
+  justify-content: center;
+}
+
+.fs-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s;
+}
+.fs-card:hover { transform: translateY(-3px); }
+
+.fs-card-gold  { border-color: #f0c040; box-shadow: 0 0 24px rgba(240,192,64,0.25); }
+.fs-card-silver { border-color: #b0b8c8; box-shadow: 0 0 16px rgba(176,184,200,0.2); }
+.fs-card-bronze { border-color: #c87840; box-shadow: 0 0 16px rgba(200,120,64,0.2); }
+
+.fs-rank {
+  text-align: center;
+  font-size: clamp(2rem, 4vw, 3rem);
+  padding: 12px 0 4px;
+  line-height: 1;
+}
+
+.fs-photo {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.fs-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 14px 12px;
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  font-weight: 700;
+}
+.fs-likes { color: #f07070; }
+.fs-skips { color: var(--color-text-muted); }
 </style>

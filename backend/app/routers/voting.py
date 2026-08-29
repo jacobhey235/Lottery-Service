@@ -9,6 +9,7 @@ from app.database import get_db
 from app.dependencies import require_voter
 from app.models import ContestState, Photo, Vote
 from app.schemas import VoteRequest, VoteResponse, VotingQueueResponse
+from app.ws_manager import manager
 
 router = APIRouter()
 
@@ -75,5 +76,22 @@ async def cast_vote(
     voted_count = (await db.execute(already_voted)).scalar()
     total_count = (await db.execute(total_photos)).scalar()
     remaining = max(0, total_count - voted_count)
+
+    like_count = await db.scalar(
+        select(func.count()).select_from(Vote).where(
+            Vote.photo_id == body.photo_id, Vote.liked == True  # noqa: E712
+        )
+    )
+    skip_count = await db.scalar(
+        select(func.count()).select_from(Vote).where(
+            Vote.photo_id == body.photo_id, Vote.liked == False  # noqa: E712
+        )
+    )
+    await manager.broadcast_to_admins({
+        "event": "vote_updated",
+        "photo_id": str(body.photo_id),
+        "like_count": like_count or 0,
+        "skip_count": skip_count or 0,
+    })
 
     return VoteResponse(ok=True, remaining=remaining)
