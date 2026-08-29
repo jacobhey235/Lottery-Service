@@ -1,11 +1,7 @@
-import os
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.database import get_db
 from app.models import ContestState, Photo, User
 from app.schemas import StatusResponse, UploadResponse
@@ -58,17 +54,11 @@ async def upload_photo(photo: UploadFile, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    filename_uuid = uuid.uuid4()
-    file_path = os.path.join(settings.photos_dir, str(filename_uuid))
-    os.makedirs(settings.photos_dir, exist_ok=True)
-    with open(file_path, "wb") as f:
-        f.write(data)
-
     photo_row = Photo(
         user_id=user.id,
-        filename=filename_uuid,
         content_type=photo.content_type,
         file_size_kb=len(data) // 1024,
+        data=data,
     )
     db.add(photo_row)
     await db.commit()

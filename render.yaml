@@ -1,9 +1,10 @@
 services:
   - type: web
-    name: photo-lottery-api
+    name: photo-lottery
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/status
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -13,25 +14,6 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: PHOTOS_DIR
-        value: /data/photos
-      - key: CORS_ORIGINS
-        sync: false
-    disk:
-      name: photos-storage
-      mountPath: /data/photos
-      sizeGB: 5
-    healthCheckPath: /api/status
-
-  - type: web
-    name: photo-lottery-frontend
-    runtime: docker
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    dockerTarget: prod
-    buildArgs:
-      - key: VITE_API_BASE_URL
-        sync: false
 
 databases:
   - name: photo-lottery-db

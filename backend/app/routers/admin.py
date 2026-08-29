@@ -1,4 +1,3 @@
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -68,11 +67,8 @@ async def delete_photo(photo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
-    file_path = os.path.join(settings.photos_dir, str(photo.filename))
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
     photo.is_deleted = True
+    photo.data = None  # free bytes from DB
     await db.commit()
     await manager.broadcast({"event": "photo_deleted", "photo_id": str(photo_id)})
     return {"ok": True}
@@ -121,13 +117,5 @@ async def restart_contest(db: AsyncSession = Depends(get_db)):
         text("UPDATE contest_state SET phase='upload', started_at=NULL, finished_at=NULL WHERE id=1")
     )
     await db.commit()
-
-    photos_dir = settings.photos_dir
-    if os.path.isdir(photos_dir):
-        for fname in os.listdir(photos_dir):
-            fpath = os.path.join(photos_dir, fname)
-            if os.path.isfile(fpath):
-                os.remove(fpath)
-
     await manager.broadcast({"event": "contest_restarted"})
     return {"ok": True}
