@@ -1,0 +1,15 @@
+services:
+  api:
+    command: ./start.sh
+    volumes: []
+    environment:
+      CORS_ORIGINS: ""
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "80:80"
