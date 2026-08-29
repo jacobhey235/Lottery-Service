@@ -19,4 +19,4 @@ databases:
   - name: photo-lottery-db
     databaseName: photolottery
     plan: free
-    version: "16"
+    version: "18"
