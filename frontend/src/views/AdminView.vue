@@ -120,7 +120,7 @@
 
     <!-- Fullscreen overlay -->
     <Teleport to="body">
-      <div v-if="showFullscreen" class="fs-overlay" @keydown.esc="showFullscreen = false" tabindex="0" ref="fsOverlay">
+      <div v-if="showFullscreen" class="fs-overlay" @keydown.esc="onFsEsc" tabindex="0" ref="fsOverlay">
         <button class="fs-close" @click="showFullscreen = false">✕ Закрыть</button>
 
         <div class="fs-header">
@@ -134,12 +134,60 @@
           Нет фотографий
         </div>
 
+        <!-- Podium layout for finished phase -->
+        <template v-else-if="phase === 'finished'">
+          <div class="fs-podium">
+            <div v-if="fsTop3[1]" class="fs-podium-slot" @click="openFsLightbox(fsTop3[1])">
+              <div class="fs-pm-medal">🥈</div>
+              <div class="fs-pm-photo-wrap fs-pm-silver">
+                <img :src="adminPhotoSrc(fsTop3[1].photo_id)" class="fs-pm-photo" alt="" />
+              </div>
+              <div class="fs-pm-stats">❤️ {{ fsTop3[1].like_count }} · 👎 {{ fsTop3[1].skip_count }}</div>
+              <div class="fs-pm-block fs-pm-b2">2</div>
+            </div>
+            <div v-if="fsTop3[0]" class="fs-podium-slot" @click="openFsLightbox(fsTop3[0])">
+              <div class="fs-pm-medal">🥇</div>
+              <div class="fs-pm-photo-wrap fs-pm-gold">
+                <img :src="adminPhotoSrc(fsTop3[0].photo_id)" class="fs-pm-photo" alt="" />
+              </div>
+              <div class="fs-pm-stats">❤️ {{ fsTop3[0].like_count }} · 👎 {{ fsTop3[0].skip_count }}</div>
+              <div class="fs-pm-block fs-pm-b1">1</div>
+            </div>
+            <div v-if="fsTop3[2]" class="fs-podium-slot" @click="openFsLightbox(fsTop3[2])">
+              <div class="fs-pm-medal">🥉</div>
+              <div class="fs-pm-photo-wrap fs-pm-bronze">
+                <img :src="adminPhotoSrc(fsTop3[2].photo_id)" class="fs-pm-photo" alt="" />
+              </div>
+              <div class="fs-pm-stats">❤️ {{ fsTop3[2].like_count }} · 👎 {{ fsTop3[2].skip_count }}</div>
+              <div class="fs-pm-block fs-pm-b3">3</div>
+            </div>
+          </div>
+
+          <div v-if="fsRest.length" class="fs-rest-list">
+            <div
+              v-for="p in fsRest"
+              :key="p.photo_id"
+              class="fs-rest-row"
+              @click="openFsLightbox(p)"
+            >
+              <span class="fs-rest-rank">{{ p._rank }}</span>
+              <img :src="adminPhotoSrc(p.photo_id)" class="fs-rest-thumb" alt="" />
+              <div class="fs-rest-stats">
+                <span class="fs-likes">❤️ {{ p.like_count }}</span>
+                <span class="fs-skips">👎 {{ p.skip_count }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Grid for upload/voting phases -->
         <div v-else class="fs-grid" :class="{ 'fs-grid-few': sortedPhotos.length <= 3 }">
           <div
             v-for="(p, idx) in sortedPhotos"
             :key="p.photo_id"
             class="fs-card"
             :class="{ 'fs-card-gold': idx === 0, 'fs-card-silver': idx === 1, 'fs-card-bronze': idx === 2 }"
+            @click="openFsLightbox(p)"
           >
             <div class="fs-rank">{{ p._rank }}</div>
             <img :src="adminPhotoSrc(p.photo_id)" class="fs-photo" alt="" />
@@ -147,6 +195,21 @@
               <span class="fs-likes">❤️ {{ p.like_count }}</span>
               <span class="fs-skips">👎 {{ p.skip_count }}</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Lightbox inside fullscreen -->
+        <div
+          v-if="fsLightboxPhoto"
+          class="fs-lightbox"
+          @click.self="fsLightboxPhoto = null"
+        >
+          <button class="fs-lightbox-close" @click="fsLightboxPhoto = null">✕</button>
+          <img :src="adminPhotoSrc(fsLightboxPhoto.photo_id)" class="fs-lightbox-img" alt="" />
+          <div class="fs-lightbox-info">
+            <span>{{ fsLightboxPhoto._rank }}</span>
+            <span class="fs-likes">❤️ {{ fsLightboxPhoto.like_count }}</span>
+            <span class="fs-skips">👎 {{ fsLightboxPhoto.skip_count }}</span>
           </div>
         </div>
       </div>
@@ -177,12 +240,27 @@ const actionError = ref('')
 
 const showFullscreen = ref(false)
 const fsOverlay = ref(null)
+const fsLightboxPhoto = ref(null)
+
+const fsTop3 = computed(() => sortedPhotos.value.slice(0, 3))
+const fsRest = computed(() => sortedPhotos.value.slice(3))
 
 watch(showFullscreen, (val) => {
-  if (val) {
-    nextTick(() => fsOverlay.value?.focus())
-  }
+  if (!val) fsLightboxPhoto.value = null
+  if (val) nextTick(() => fsOverlay.value?.focus())
 })
+
+function openFsLightbox(photo) {
+  fsLightboxPhoto.value = photo
+}
+
+function onFsEsc() {
+  if (fsLightboxPhoto.value) {
+    fsLightboxPhoto.value = null
+  } else {
+    showFullscreen.value = false
+  }
+}
 
 const phaseLabel = computed(() => ({
   upload: 'Приём фотографий',
@@ -503,8 +581,162 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   transition: transform 0.2s;
+  cursor: pointer;
 }
 .fs-card:hover { transform: translateY(-3px); }
+
+/* ── Fullscreen Podium ── */
+.fs-podium {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  max-width: 680px;
+  margin-bottom: 32px;
+}
+
+.fs-podium-slot {
+  flex: 1;
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+.fs-podium-slot:hover .fs-pm-photo { filter: brightness(1.1); }
+
+.fs-pm-medal { font-size: 2rem; line-height: 1; margin-bottom: 8px; }
+
+.fs-pm-photo-wrap {
+  width: 100%;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  border-width: 2px;
+  border-style: solid;
+}
+.fs-pm-gold   { border-color: #f5c518; }
+.fs-pm-silver { border-color: #aaa; }
+.fs-pm-bronze { border-color: #cd7f32; }
+
+.fs-pm-photo {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.15s;
+}
+
+.fs-pm-stats {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.fs-pm-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.5);
+  border-radius: 0 0 8px 8px;
+}
+.fs-pm-b1 { background: #b8900a; height: 100px; }
+.fs-pm-b2 { background: #707070; height: 70px; }
+.fs-pm-b3 { background: #9c5c1a; height: 46px; }
+
+/* ── Fullscreen Rest list ── */
+.fs-rest-list {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 48px;
+}
+
+.fs-rest-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.fs-rest-row:hover { background: rgba(255, 255, 255, 0.1); }
+
+.fs-rest-rank {
+  font-size: 1.2rem;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.fs-rest-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.fs-rest-stats {
+  display: flex;
+  gap: 20px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* ── Fullscreen Lightbox ── */
+.fs-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.fs-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.fs-lightbox-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+.fs-lightbox-img {
+  max-width: 90vw;
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.8);
+}
+
+.fs-lightbox-info {
+  display: flex;
+  gap: 24px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+}
 
 .fs-card-gold  { border-color: #f0c040; box-shadow: 0 0 24px rgba(240,192,64,0.25); }
 .fs-card-silver { border-color: #b0b8c8; box-shadow: 0 0 16px rgba(176,184,200,0.2); }
