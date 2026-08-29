@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -19,13 +19,13 @@ async def get_results(db: AsyncSession = Depends(get_db)):
     rows = await db.execute(
         select(
             Photo.id,
-            func.sum(func.cast(Vote.liked, func.Integer())).label("like_count"),
-            func.sum(func.cast(~Vote.liked, func.Integer())).label("skip_count"),
+            func.sum(cast(Vote.liked, Integer)).label("like_count"),
+            func.sum(cast(~Vote.liked, Integer)).label("skip_count"),
         )
         .join(Vote, Vote.photo_id == Photo.id, isouter=True)
         .where(Photo.is_deleted == False)  # noqa: E712
         .group_by(Photo.id)
-        .order_by(func.sum(func.cast(Vote.liked, func.Integer())).desc().nullslast())
+        .order_by(func.sum(cast(Vote.liked, Integer)).desc().nullslast())
     )
 
     rankings = []

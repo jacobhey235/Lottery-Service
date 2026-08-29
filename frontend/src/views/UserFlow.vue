@@ -54,14 +54,18 @@ async function syncPhase(newPhase) {
     try {
       const data = await apiVotingQueue(userStore.userId)
       contestStore.setQueue(data.queue)
-    } catch {}
+    } catch (e) {
+      console.error('Failed to load voting queue:', e)
+    }
   }
 
   if (newPhase === 'finished') {
     try {
       const data = await apiResults()
       contestStore.setRankings(data.rankings)
-    } catch {}
+    } catch (e) {
+      console.error('Failed to load results:', e)
+    }
   }
 }
 
